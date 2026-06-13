@@ -1,7 +1,7 @@
 // ポケダンス なわとび — オフライン用 Service Worker
 // アプリ本体（HTML/マニフェスト/アイコン）をキャッシュし、ネットが無くても起動できるようにする。
 // ※ 曲データはここではなく IndexedDB に保存される（アプリ側）。
-const CACHE = 'pdn-v2';
+const CACHE = 'pdn-v3';
 const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', e => {

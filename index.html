@@ -237,7 +237,8 @@
     <div class="opt" style="flex-wrap:wrap; gap:6px">どうぶつ：<span id="animals">
       <button class="abtn" data-a="🐰">🐰</button><button class="abtn" data-a="🐻">🐻</button><button class="abtn" data-a="🐱">🐱</button><button class="abtn" data-a="🐶">🐶</button><button class="abtn" data-a="🐥">🐥</button><button class="abtn" data-a="🐸">🐸</button><button class="abtn" data-a="🐧">🐧</button><button class="abtn" data-a="🐹">🐹</button>
     </span></div>
-    <label class="opt"><input type="checkbox" id="optPitch" checked> こえの たかさを そのままにする（ゆっくりでも きれいな おと）</label>
+    <label class="opt"><input type="checkbox" id="optPitch"> こえの たかさを そのままにする</label>
+    <p class="hint">ふだんは <b>オフ（おすすめ）</b>。ゆっくりにしても 音が きれいです（そのかわり 音は すこし ひくく なります）。オンにすると 声の高さは そのままですが、ゆっくりのとき 音が にごりやすく なります。※ふつう(100%)では どちらでも 同じです。</p>
     <label class="opt"><input type="checkbox" id="optCount" checked> スタートの 5びょうまえから 「5・4・3・2・1」 の あいず</label>
     <div style="text-align:center"><button class="linkbtn" id="changeSong">べつの きょくを えらぶ</button></div>
     <p class="hint">
@@ -258,7 +259,7 @@
   audio.preload='auto';
   const jEl=$('jumper'), shEl=$('gshadow'), ropeEl=$('rope'), popEl=$('pop');
 
-  let audioReady=false, tempo=1, keepPitch=true, countIn=true, baseBpm=112, animal='🐰';
+  let audioReady=false, tempo=1, keepPitch=false, countIn=true, baseBpm=112, animal='🐰';
   let anchorSong=0;                 // どうぶつが とぶ拍の きじゅん（曲のなかの秒）
   let countingIn=false, actx=null, wakeLock=null, rafId=0;
 
