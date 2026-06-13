@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="なわとび">
+<meta name="theme-color" content="#fff7e6">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Crect width='180' height='180' rx='40' fill='%23fff7e6'/%3E%3Cellipse cx='90' cy='95' rx='44' ry='60' fill='none' stroke='%23ff6b9a' stroke-width='10'/%3E%3Crect x='40' y='150' width='100' height='8' rx='4' fill='%23cfe0c2'/%3E%3Ccircle cx='90' cy='92' r='26' fill='%230e221d'/%3E%3C/svg%3E">
+<title>ポケダンス なわとび れんしゅう</title>
+<style>
+  :root{
+    --bg1:#fff7e6; --bg2:#d8f3ff; --card:#ffffff;
+    --green:#37b24d; --green2:#2f9e44;
+    --orange:#ff922b; --orange2:#f76707;
+    --blue:#4dabf7; --ink:#343a40; --muted:#868e96;
+    --rope:#ff6b9a;
+    --shadow:0 10px 30px rgba(0,0,0,.12);
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ margin:0; min-height:100%; }
+  body{
+    font-family:"Hiragino Maru Gothic ProN","Hiragino Kaku Gothic ProN","Yu Gothic",system-ui,sans-serif;
+    color:var(--ink);
+    background:linear-gradient(160deg,var(--bg1),var(--bg2));
+    background-attachment:fixed;
+    min-height:100dvh;
+    display:flex; align-items:flex-start; justify-content:center;
+    padding:max(18px,env(safe-area-inset-top)) max(18px,env(safe-area-inset-right)) max(18px,env(safe-area-inset-bottom)) max(18px,env(safe-area-inset-left));
+    overflow-x:hidden;
+    -webkit-user-select:none; user-select:none; -webkit-touch-callout:none;
+    touch-action:manipulation;
+  }
+  .app{
+    width:100%; max-width:560px; background:var(--card);
+    border-radius:28px; box-shadow:var(--shadow);
+    padding:22px 20px 26px; text-align:center;
+  }
+  h1{ font-size:26px; margin:4px 0 2px; letter-spacing:.02em; }
+  .sub{ color:var(--muted); font-size:14px; margin:0 0 14px; }
+
+  /* ファイル選択 */
+  #drop{
+    border:3px dashed #c5d4e3; border-radius:20px; padding:22px 14px;
+    color:var(--muted); font-size:16px; margin-bottom:8px; cursor:pointer;
+    transition:.15s; background:#f8fbff;
+  }
+  #drop.drag{ border-color:var(--blue); background:#eaf6ff; color:var(--blue); }
+  #drop b{ color:var(--ink); }
+  .songname{ font-size:15px; color:var(--green2); font-weight:700; margin:6px 0 2px; min-height:20px; }
+
+  /* ステージ（とぶタイミングだけを 見せる。動きは JS が 曲の時刻で 駆動） */
+  .stage{ position:relative; height:220px; margin:6px 0 2px; overflow:hidden; }
+  .scene{ position:absolute; inset:0; }
+  .ground{ position:absolute; left:50%; bottom:44px; width:210px; height:7px; margin-left:-105px; border-radius:4px; background:#cfe0c2; }
+  .gshadow{ position:absolute; left:50%; bottom:40px; width:120px; height:16px; margin-left:-60px; border-radius:50%; background:rgba(14,34,29,.14); will-change:transform,opacity; }
+  .jpos{ position:absolute; left:50%; bottom:50px; transform:translateX(-50%); }
+  .jumper{ font-size:78px; line-height:1; display:block; transform-origin:bottom center; will-change:transform; }
+  .rope{ position:absolute; left:50%; bottom:46px; width:120px; height:30px; margin-left:-60px; border:0 solid var(--rope); border-bottom-width:8px; border-radius:0 0 200px 200px/0 0 60px 60px; opacity:0; will-change:opacity; }
+  .pop{ position:absolute; left:50%; top:24px; font-size:30px; font-weight:900; color:var(--rope); opacity:0; white-space:nowrap; transform:translateX(-50%); transform-origin:center; will-change:transform,opacity; }
+  #bigCount{
+    position:absolute; inset:0; display:none; align-items:center; justify-content:center;
+    font-size:90px; font-weight:900; color:var(--orange2);
+    text-shadow:0 4px 0 #ffd8a8;
+  }
+  #bigCount.pop{ animation:pop .5s ease; }
+  @keyframes pop{ 0%{ transform:scale(.4); opacity:.2 } 50%{ transform:scale(1.15); opacity:1 } 100%{ transform:scale(1); opacity:1 } }
+
+  /* シークバー */
+  .seekwrap{ display:flex; align-items:center; gap:8px; margin:6px 2px 16px; }
+  .time{ font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums; min-width:42px; }
+  input[type=range]{ -webkit-appearance:none; appearance:none; width:100%; background:transparent; }
+  #seek{ flex:1; }
+  input[type=range]::-webkit-slider-runnable-track{ height:14px; border-radius:10px; background:#e3e8ef; }
+  input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; appearance:none; width:30px; height:30px; margin-top:-8px; border-radius:50%; background:var(--blue); border:4px solid #fff; box-shadow:0 2px 6px rgba(0,0,0,.25); cursor:pointer; }
+  input[type=range]::-moz-range-track{ height:14px; border-radius:10px; background:#e3e8ef; }
+  input[type=range]::-moz-range-thumb{ width:26px; height:26px; border-radius:50%; background:var(--blue); border:4px solid #fff; box-shadow:0 2px 6px rgba(0,0,0,.25); cursor:pointer; }
+
+  /* メインボタン */
+  .controls{ display:flex; align-items:center; justify-content:center; gap:16px; }
+  .bigbtn{
+    border:none; cursor:pointer; color:#fff; font-weight:800;
+    border-radius:50%; width:160px; height:160px; font-size:30px;
+    background:linear-gradient(160deg,var(--green),var(--green2));
+    box-shadow:0 8px 0 #2b8a3e, 0 12px 22px rgba(0,0,0,.18);
+    transition:transform .07s, box-shadow .07s; line-height:1.15;
+  }
+  .bigbtn .ico{ font-size:46px; display:block; }
+  .playing .bigbtn{ background:linear-gradient(160deg,var(--orange),var(--orange2)); box-shadow:0 8px 0 #d9480f, 0 12px 22px rgba(0,0,0,.18); }
+  .bigbtn:active{ transform:translateY(6px); box-shadow:0 2px 0 #2b8a3e, 0 4px 10px rgba(0,0,0,.18); }
+  .playing .bigbtn:active{ box-shadow:0 2px 0 #d9480f, 0 4px 10px rgba(0,0,0,.18); }
+  .roundbtn{
+    border:none; cursor:pointer; background:#fff; color:var(--ink);
+    border-radius:50%; width:96px; height:96px; font-size:15px; font-weight:700;
+    box-shadow:0 5px 0 #dee2e6, 0 8px 16px rgba(0,0,0,.12);
+  }
+  .roundbtn .ico{ font-size:34px; display:block; }
+  .roundbtn:active{ transform:translateY(4px); box-shadow:0 1px 0 #dee2e6; }
+  .bigbtn:disabled,.roundbtn:disabled{ opacity:.45; cursor:default; }
+
+  /* テンポ */
+  .tempo{ margin-top:20px; background:#f4f8fc; border-radius:20px; padding:16px 14px 14px; }
+  .tempo h2{ font-size:16px; margin:0 0 6px; color:var(--ink); }
+  .pct{ font-size:40px; font-weight:900; color:var(--blue); line-height:1; display:flex; align-items:baseline; justify-content:center; gap:8px; }
+  .pct small{ font-size:18px; font-weight:700; color:var(--muted); }
+  .mult{ font-size:20px; font-weight:800; color:var(--muted); font-variant-numeric:tabular-nums; }
+  .finerow{ display:flex; align-items:center; gap:10px; margin:10px 2px 2px; }
+  .finerow .scalerow{ flex:1; margin:0; }
+  .finebtn{
+    flex:none; border:none; cursor:pointer; background:#fff; color:var(--blue);
+    width:56px; height:56px; border-radius:18px; font-size:30px; font-weight:900;
+    box-shadow:0 4px 0 #cdd7e1, 0 6px 12px rgba(0,0,0,.08); line-height:1;
+  }
+  .finebtn:active{ transform:translateY(4px); box-shadow:0 1px 0 #cdd7e1; }
+  .finehint{ font-size:12px; color:var(--muted); margin-top:8px; }
+  .scalerow{ display:flex; align-items:center; gap:10px; margin:8px 4px 4px; }
+  .scalerow .emoji{ font-size:26px; }
+  .presets{ display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-top:12px; }
+  .chip{
+    border:none; cursor:pointer; background:#fff; color:var(--ink);
+    border-radius:999px; padding:10px 14px; font-size:15px; font-weight:700;
+    box-shadow:0 3px 0 #dee2e6;
+  }
+  .chip:active{ transform:translateY(2px); box-shadow:none; }
+  .chip.on{ background:var(--blue); color:#fff; box-shadow:0 3px 0 #1c7ed6; }
+
+  /* せってい */
+  details{ margin-top:14px; text-align:left; }
+  summary{ cursor:pointer; color:var(--muted); font-size:14px; list-style:none; text-align:center; }
+  summary::-webkit-details-marker{ display:none; }
+  .opt{ display:flex; align-items:center; gap:10px; padding:10px 6px; font-size:15px; }
+  .opt input{ width:24px; height:24px; }
+  .linkbtn{ background:none; border:none; color:var(--blue); font-size:15px; text-decoration:underline; cursor:pointer; padding:8px 0; }
+  .hint{ font-size:12px; color:var(--muted); line-height:1.6; margin-top:6px; }
+  .tapbtn{ border:none; cursor:pointer; background:var(--rope); color:#fff; font-weight:800; font-size:16px; border-radius:14px; padding:12px 16px; box-shadow:0 4px 0 #d6447a; }
+  .tapbtn:active{ transform:translateY(3px); box-shadow:0 1px 0 #d6447a; }
+  .tapbtn.flash{ filter:brightness(1.18); }
+  .bpmout{ font-size:14px; color:var(--ink); font-weight:700; }
+  .abtn{ border:none; cursor:pointer; background:#fff; font-size:24px; line-height:1; padding:6px 9px; border-radius:12px; box-shadow:0 2px 0 #dee2e6; }
+  .abtn.on{ box-shadow:0 0 0 3px var(--rope); }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <h1>🎶 ポケダンス なわとび 🤸</h1>
+  <p class="sub">れんしゅうよう プレイヤー</p>
+
+  <div id="drop">ここを タップして<br><b>きょくを えらぶ</b><br><span style="font-size:13px">（おうちのひとへ：音源ファイルを選んでください）</span></div>
+  <div class="songname" id="songname"></div>
+
+  <div class="stage" id="stage">
+    <div class="scene">
+      <div class="ground"></div>
+      <div class="gshadow" id="gshadow"></div>
+      <div class="rope" id="rope"></div>
+      <div class="jpos"><div class="jumper" id="jumper">🐰</div></div>
+      <div class="pop" id="pop">ピョン!</div>
+    </div>
+    <div id="bigCount">3</div>
+  </div>
+
+  <div class="seekwrap">
+    <span class="time" id="cur">0:00</span>
+    <input type="range" id="seek" min="0" max="100" value="0" step="0.1" disabled>
+    <span class="time" id="dur">0:00</span>
+  </div>
+
+  <div class="controls">
+    <button class="roundbtn" id="restart" disabled>
+      <span class="ico">⏮</span>さいしょから
+    </button>
+    <button class="bigbtn" id="play">
+      <span class="ico" id="playico">▶</span>
+      <span id="playlabel">さいせい</span>
+    </button>
+  </div>
+
+  <div class="tempo">
+    <h2>スピード</h2>
+    <div class="pct"><span id="pct">100</span><small>%</small><span class="mult" id="mult">×1.00</span></div>
+    <div class="finerow">
+      <button class="finebtn" id="slower" aria-label="おそくする">−</button>
+      <div class="scalerow">
+        <span class="emoji">🐌</span>
+        <input type="range" id="tempo" min="50" max="120" value="100" step="1">
+        <span class="emoji">🐰</span>
+      </div>
+      <button class="finebtn" id="faster" aria-label="はやくする">＋</button>
+    </div>
+    <div class="finehint">＋／− で 1%（0.01ばい）ずつ こまかく ちょうせいできます</div>
+    <div class="presets" id="presets">
+      <button class="chip" data-v="50">🐌 はんぶん</button>
+      <button class="chip" data-v="70">70%</button>
+      <button class="chip" data-v="80">80%</button>
+      <button class="chip" data-v="90">90%</button>
+      <button class="chip on" data-v="100">💯 ふつう</button>
+      <button class="chip" data-v="110">110%</button>
+      <button class="chip" data-v="120">🐰 はやい</button>
+    </div>
+  </div>
+
+  <details open>
+    <summary>⚙ リズム・どうぶつ・せってい</summary>
+    <div class="opt" style="flex-wrap:wrap; gap:8px">
+      <button class="tapbtn" id="tap">🥁 リズムをあわせる</button>
+      <span class="bpmout" id="bpmout"></span>
+      <button class="linkbtn" id="bpmreset">リセット</button>
+    </div>
+    <p class="hint">きょくを さいせいしながら、ビートに あわせて「リズムをあわせる」を 4〜8回 タップしてください。そのテンポで どうぶつが とびます（スピードを かえても れんどうします）。キーボードの「T」でも タップできます。</p>
+    <div class="opt" style="flex-wrap:wrap; gap:6px">どうぶつ：<span id="animals">
+      <button class="abtn" data-a="🐰">🐰</button><button class="abtn" data-a="🐻">🐻</button><button class="abtn" data-a="🐱">🐱</button><button class="abtn" data-a="🐶">🐶</button><button class="abtn" data-a="🐥">🐥</button><button class="abtn" data-a="🐸">🐸</button><button class="abtn" data-a="🐧">🐧</button><button class="abtn" data-a="🐹">🐹</button>
+    </span></div>
+    <label class="opt"><input type="checkbox" id="optPitch" checked> こえの たかさを そのままにする（ゆっくりでも きれいな おと）</label>
+    <label class="opt"><input type="checkbox" id="optCount" checked> スタートの 5びょうまえから 「5・4・3・2・1」 の あいず</label>
+    <div style="text-align:center"><button class="linkbtn" id="changeSong">べつの きょくを えらぶ</button></div>
+    <p class="hint">
+      ・スペースキー：さいせい／とめる ・Backspace：さいしょへ<br>
+      ・きょくは いちど えらぶと きおくされます（つぎからは そのまま）。<br>
+      ・うまく きおくされない ときは、ひらくたびに もういちど えらんでください。
+    </p>
+  </details>
+</div>
+
+<input type="file" id="file" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg" style="display:none">
+
+<script>
+(() => {
+  const $ = s => document.getElementById(s);
+  const app=$('app'), audio=new Audio();
+  audio.preload='auto';
+  const jEl=$('jumper'), shEl=$('gshadow'), ropeEl=$('rope'), popEl=$('pop');
+
+  let audioReady=false, tempo=1, keepPitch=true, countIn=true, baseBpm=112, animal='🐰';
+  let anchorSong=0;                 // どうぶつが とぶ拍の きじゅん（曲のなかの秒）
+  let countingIn=false, actx=null, wakeLock=null, rafId=0;
+
+  // ---------- せってい よみこみ ----------
+  try{
+    const s=JSON.parse(localStorage.getItem('pdn')||'{}');
+    if(s.tempo) tempo=s.tempo;
+    if(typeof s.keepPitch==='boolean') keepPitch=s.keepPitch;
+    if(typeof s.countIn==='boolean') countIn=s.countIn;
+    if(s.baseBpm) baseBpm=s.baseBpm;
+    if(typeof s.anchorSong==='number') anchorSong=s.anchorSong;
+    if(s.animal) animal=s.animal;
+  }catch(e){}
+  const save=()=>{ try{ localStorage.setItem('pdn',JSON.stringify({tempo,keepPitch,countIn,baseBpm,anchorSong,animal})); }catch(e){} };
+
+  // ---------- テンポ ----------
+  function applyTempo(){
+    audio.playbackRate=tempo;
+    audio.preservesPitch=keepPitch;
+    audio.mozPreservesPitch=keepPitch;
+    audio.webkitPreservesPitch=keepPitch;
+  }
+  function setTempo(v){
+    tempo=Math.min(1.2,Math.max(.5, v/100));
+    const pctv=Math.round(tempo*100);
+    $('pct').textContent=pctv;
+    $('mult').textContent='×'+(pctv/100).toFixed(2);
+    $('tempo').value=pctv;
+    document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on', +c.dataset.v===pctv));
+    applyTempo();
+    updateBpmOut();
+    save();
+  }
+
+  // ---------- なわとびアニメ（曲の時刻に直結＝一定リズム） ----------
+  // 跳ねる位相は「曲のなかの秒(currentTime)」だけで決める。
+  // → 再生スピードを変えても、シーク・一時停止しても、拍からズレない。
+  function updateBpmOut(){
+    $('bpmout').textContent = 'いまのスピードで 1ぷんに '+Math.round(baseBpm*tempo)+'かい';
+  }
+  function phaseNow(){                  // 0..1（0=接地・ふみきり＝とぶ瞬間）
+    const beatSong = 60/baseBpm;        // 曲のなかの 秒/拍
+    let p = (audio.currentTime - anchorSong)/beatSong;
+    return p - Math.floor(p);
+  }
+  function paintRest(){
+    jEl.style.transform='translateY(0) scaleX(1) scaleY(1)';
+    shEl.style.transform='scaleX(1)'; shEl.style.opacity='1';
+    ropeEl.style.opacity='0'; popEl.style.opacity='0';
+  }
+  function jumpFrame(){
+    rafId = requestAnimationFrame(jumpFrame);
+    const p = phaseNow(), airEnd=0.82, H=66;
+    let height=0;
+    if(p<airEnd){                       // 空中（上がって 下りる）
+      const a=p/airEnd; height=Math.sin(Math.PI*a);
+      jEl.style.transform='translateY('+(-H*height).toFixed(1)+'px) scaleX(.97) scaleY(1.05)';
+    }else{                              // 接地（つぶれて もどる）
+      const s=Math.sin(Math.PI*(p-airEnd)/(1-airEnd));
+      jEl.style.transform='translateY(0) scaleX('+(1+0.18*s).toFixed(3)+') scaleY('+(1-0.18*s).toFixed(3)+')';
+    }
+    shEl.style.transform='scaleX('+(1.15-0.55*height).toFixed(3)+')';
+    shEl.style.opacity=(1-0.45*height).toFixed(3);
+    const prox=Math.max(0, 1-Math.min(p,1-p)/0.12);   // 拍への近さ（0..1）
+    ropeEl.style.opacity=prox.toFixed(3);
+    popEl.style.opacity=prox.toFixed(3);
+    popEl.style.transform='translateX(-50%) translateY('+(-12*prox).toFixed(1)+'px) scale('+(0.6+0.5*prox).toFixed(3)+')';
+  }
+  function startAnim(){ if(!rafId) jumpFrame(); }
+  function stopAnim(){ if(rafId){ cancelAnimationFrame(rafId); rafId=0; } paintRest(); }
+
+  let taps=[], tapTimer=null;
+  function onTap(){
+    const now = performance.now();
+    if(tapTimer) clearTimeout(tapTimer);
+    tapTimer = setTimeout(()=>{ taps=[]; }, 2200);   // 間が あいたら リセット
+    taps.push(now); if(taps.length>8) taps.shift();
+    const btn=$('tap'); btn.classList.add('flash'); setTimeout(()=>btn.classList.remove('flash'),90);
+    if(taps.length>=2){
+      let sum=0; for(let i=1;i<taps.length;i++) sum+=taps[i]-taps[i-1];
+      const measured = 60000/(sum/(taps.length-1));        // 今の再生スピードでの 1分あたり拍
+      baseBpm = Math.min(240, Math.max(40, measured/tempo)); // 100%換算で保存
+      anchorSong = audio.currentTime;                       // この拍を きじゅんに そろえる
+      updateBpmOut(); save();
+    }
+  }
+  function setAnimal(a){
+    animal=a; jEl.textContent=a;
+    document.querySelectorAll('.abtn').forEach(b=>b.classList.toggle('on', b.dataset.a===a));
+    save();
+  }
+
+  // ---------- おとの あいず（カウントイン） ----------
+  function beep(freq,dur){
+    try{
+      actx=actx||new (window.AudioContext||window.webkitAudioContext)();
+      if(actx.state==='suspended') actx.resume();
+      const o=actx.createOscillator(), g=actx.createGain(), t=actx.currentTime;
+      o.type='sine'; o.frequency.value=freq;
+      g.gain.setValueAtTime(.0001,t);
+      g.gain.exponentialRampToValueAtTime(.35,t+.02);
+      g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+      o.connect(g); g.connect(actx.destination);
+      o.start(t); o.stop(t+dur+.02);
+    }catch(e){}
+  }
+  function runCountIn(){
+    return new Promise((resolve,reject)=>{
+      countingIn=true;
+      const box=$('bigCount'); box.style.display='flex';
+      let n=5;                                    // 5びょうまえから 5・4・3・2・1
+      (function tick(){
+        if(!countingIn){ box.style.display='none'; return reject('cancel'); }
+        if(n>0){
+          box.textContent=n; box.classList.remove('pop'); void box.offsetWidth; box.classList.add('pop');
+          beep(n===1?880:620,.13); n--;
+          setTimeout(tick,1000);                  // 1びょう かんかく
+        }else{
+          box.style.display='none';               // 0びょう：イラストは ださない
+          beep(1175,.2);                          // スタートの あいず音だけ
+          countingIn=false; resolve();
+        }
+      })();
+    });
+  }
+
+  // iOS対策：タップ（ユーザー操作）の中で 音声を「解錠」しておく
+  function unlockAudioCtx(){
+    try{
+      actx = actx || new (window.AudioContext||window.webkitAudioContext)();
+      if(actx.state==='suspended') actx.resume();
+      const b=actx.createBuffer(1,1,22050), s=actx.createBufferSource();  // 無音を1回鳴らしてWebAudio解錠（ビープ用）
+      s.buffer=b; s.connect(actx.destination); s.start(0);
+    }catch(e){}
+  }
+
+  // ---------- さいせい／とめる ----------
+  async function togglePlay(){
+    if(!audioReady){ $('file').click(); return; }
+    if(countingIn){ countingIn=false; return; } // あいず ちゅうに おすと キャンセル
+    if(audio.paused){
+      applyTempo();
+      unlockAudioCtx();                          // ジェスチャ内でWebAudioを起こす
+      if(countIn && audio.currentTime<0.1){
+        // iOSは「操作の中で一度 再生」しないと、後から鳴らせない。
+        // 無音で一瞬だけ再生→停止して 音声要素を解錠してから カウントダウンへ。
+        try{ audio.muted=true; await audio.play(); audio.pause(); audio.currentTime=0; }catch(e){}
+        audio.muted=false;
+        try{ await runCountIn(); }catch(e){ audio.muted=false; return; }
+      }
+      try{ await audio.play(); }catch(e){}
+    }else{
+      audio.pause();
+    }
+  }
+  function toStart(){ audio.pause(); audio.currentTime=0; updateSeek(); }
+
+  // ---------- がめんの じょうたい ----------
+  function setPlayingUI(on){
+    app.classList.toggle('playing',on);
+    $('playico').textContent=on?'⏸':'▶';
+    $('playlabel').textContent=on?'とめる':'さいせい';
+    on?reqWake():relWake();
+    on?startAnim():stopAnim();
+  }
+  audio.addEventListener('play',()=>setPlayingUI(true));
+  audio.addEventListener('pause',()=>setPlayingUI(false));
+  audio.addEventListener('ended',()=>{ setPlayingUI(false); });
+
+  // ---------- シークバー ----------
+  const fmt=s=>{ s=Math.max(0,s|0); return (s/60|0)+':'+String(s%60).padStart(2,'0'); };
+  function updateSeek(){
+    const d=audio.duration||0, c=audio.currentTime||0;
+    $('cur').textContent=fmt(c); $('dur').textContent=fmt(d);
+    $('seek').value=d? (c/d*100):0;
+  }
+  audio.addEventListener('loadedmetadata',()=>{ $('seek').disabled=false; $('restart').disabled=false; updateSeek(); });
+  audio.addEventListener('timeupdate',updateSeek);
+  $('seek').addEventListener('input',e=>{ if(audio.duration) audio.currentTime=e.target.value/100*audio.duration; });
+
+  // ---------- スリープ ぼうし ----------
+  async function reqWake(){ try{ if('wakeLock'in navigator) wakeLock=await navigator.wakeLock.request('screen'); }catch(e){} }
+  function relWake(){ try{ wakeLock&&wakeLock.release(); }catch(e){} wakeLock=null; }
+  document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible'&&!audio.paused) reqWake(); });
+
+  // ---------- きょく よみこみ ----------
+  function loadFile(file){
+    if(!file) return;
+    if(audio.src) try{ URL.revokeObjectURL(audio.src); }catch(e){}
+    audio.src=URL.createObjectURL(file);
+    audio.load();
+    audioReady=true;
+    $('songname').textContent='🎵 '+file.name;
+    $('drop').style.display='none';
+    applyTempo();
+    saveSong(file);
+    try{ localStorage.setItem('pdn_name',file.name); }catch(e){}
+  }
+
+  // IndexedDB に きょくを ほぞん（つぎから そのまま つかえる）
+  function idb(){
+    return new Promise((res,rej)=>{
+      try{
+        const r=indexedDB.open('pdn-db',1);
+        r.onupgradeneeded=()=>r.result.createObjectStore('songs');
+        r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error);
+      }catch(e){ rej(e); }
+    });
+  }
+  async function saveSong(file){
+    try{ const db=await idb(); db.transaction('songs','readwrite').objectStore('songs').put(file,'song'); }catch(e){}
+  }
+  async function restoreSong(){
+    try{
+      const db=await idb();
+      const blob=await new Promise((res,rej)=>{ const q=db.transaction('songs').objectStore('songs').get('song'); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error); });
+      if(blob){ const name=blob.name||localStorage.getItem('pdn_name')||'まえの きょく'; loadFile(new File([blob],name,{type:blob.type||'audio/mpeg'})); return true; }
+    }catch(e){}
+    return false;
+  }
+  // 同じフォルダの poke-dance.mp3 があれば じどう よみこみ（サーバー経由のとき）
+  async function tryColocated(){
+    for(const n of ['poke-dance.mp3','pokedance.mp3','poke-dance.m4a','song.mp3']){
+      try{ const r=await fetch(n); if(r.ok){ loadFile(new File([await r.blob()],n,{type:'audio/mpeg'})); return true; } }catch(e){}
+    }
+    return false;
+  }
+
+  // ---------- そうさ の むすびつけ ----------
+  $('play').addEventListener('click',togglePlay);
+  $('restart').addEventListener('click',toStart);
+  $('drop').addEventListener('click',()=>$('file').click());
+  $('changeSong').addEventListener('click',()=>$('file').click());
+  $('file').addEventListener('change',e=>loadFile(e.target.files[0]));
+
+  // ドラッグ＆ドロップ
+  ['dragenter','dragover'].forEach(ev=>document.addEventListener(ev,e=>{ e.preventDefault(); $('drop').classList.add('drag'); }));
+  ['dragleave','drop'].forEach(ev=>document.addEventListener(ev,e=>{ e.preventDefault(); $('drop').classList.remove('drag'); }));
+  document.addEventListener('drop',e=>{ const f=[...e.dataTransfer.files].find(f=>f.type.startsWith('audio')||/\.(mp3|m4a|aac|wav|ogg)$/i.test(f.name)); if(f) loadFile(f); });
+
+  // テンポ そうさ
+  $('tempo').addEventListener('input',e=>setTempo(+e.target.value));
+  $('slower').addEventListener('click',()=>setTempo(Math.round(tempo*100)-1));
+  $('faster').addEventListener('click',()=>setTempo(Math.round(tempo*100)+1));
+  $('presets').addEventListener('click',e=>{ const b=e.target.closest('.chip'); if(b) setTempo(+b.dataset.v); });
+
+  // リズム（タップ）・どうぶつ
+  $('tap').addEventListener('click',onTap);
+  $('bpmreset').addEventListener('click',()=>{ baseBpm=112; anchorSong=0; taps=[]; updateBpmOut(); save(); });
+  $('animals').addEventListener('click',e=>{ const b=e.target.closest('.abtn'); if(b) setAnimal(b.dataset.a); });
+
+  // せってい
+  $('optPitch').addEventListener('change',e=>{ keepPitch=e.target.checked; applyTempo(); save(); });
+  $('optCount').addEventListener('change',e=>{ countIn=e.target.checked; save(); });
+
+  // キーボード
+  document.addEventListener('keydown',e=>{
+    if(['INPUT','TEXTAREA'].includes(e.target.tagName)&&e.target.type!=='range') return;
+    if(e.code==='Space'){ e.preventDefault(); togglePlay(); }
+    else if(e.code==='Backspace'||e.code==='Home'){ e.preventDefault(); toStart(); }
+    else if(e.code==='KeyT'){ e.preventDefault(); onTap(); }
+  });
+
+  // ---------- しょきか ----------
+  $('optPitch').checked=keepPitch;
+  $('optCount').checked=countIn;
+  setAnimal(animal);
+  setTempo(Math.round(tempo*100));
+  (async()=>{ if(!await restoreSong()) await tryColocated(); })();
+
+  // オフライン対応（https で配信したときのみ有効。file:// では何もしない）
+  if('serviceWorker' in navigator && location.protocol==='https:'){
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  }
+})();
+</script>
+</body>
+</html>

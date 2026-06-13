@@ -1,0 +1,14 @@
+# ── 著作権保護：音源ファイルは 公開リポジトリに 絶対に含めない ──────────
+# （POKÉDANCE 等の曲データは iPad 内 (IndexedDB) にのみ保存し、Web には上げない）
+*.mp3
+*.m4a
+*.aac
+*.wav
+*.ogg
+*.flac
+poke-dance.*
+pokedance.*
+song.*
+
+# OS
+.DS_Store
