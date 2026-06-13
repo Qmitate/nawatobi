@@ -141,6 +141,27 @@
   .bpmout{ font-size:14px; color:var(--ink); font-weight:700; }
   .abtn{ border:none; cursor:pointer; background:#fff; font-size:24px; line-height:1; padding:6px 9px; border-radius:12px; box-shadow:0 2px 0 #dee2e6; }
   .abtn.on{ box-shadow:0 0 0 3px var(--rope); }
+
+  /* たて向き：1カラム（既定）。col-* は ただの ブロックとして 縦に積む */
+  .col-main, .col-side{ display:block; }
+
+  /* よこ向き（iPad 標準デザイン）：左=アニメ＋再生 / 右=スピード＋せってい の 2カラム */
+  @media (orientation:landscape) and (min-width:760px){
+    .app{
+      max-width:1000px;
+      display:flex; flex-wrap:wrap; align-items:flex-start;
+      column-gap:34px; row-gap:0;
+      padding:18px 26px 22px;
+    }
+    .app > h1{ flex-basis:100%; margin:2px 0 0; font-size:24px; }
+    .app > .sub{ flex-basis:100%; margin:0 0 10px; }
+    #drop, .songname{ flex-basis:100%; }
+    .col-main, .col-side{ flex:1 1 0; min-width:0; }
+    .col-main{ display:flex; flex-direction:column; }
+    .stage{ height:248px; margin-top:0; }
+    .tempo{ margin-top:0; }
+    details{ margin-top:12px; }
+  }
 </style>
 </head>
 <body>
@@ -151,6 +172,7 @@
   <div id="drop">ここを タップして<br><b>きょくを えらぶ</b><br><span style="font-size:13px">（おうちのひとへ：音源ファイルを選んでください）</span></div>
   <div class="songname" id="songname"></div>
 
+  <div class="col-main">
   <div class="stage" id="stage">
     <div class="scene">
       <div class="ground"></div>
@@ -177,7 +199,9 @@
       <span id="playlabel">さいせい</span>
     </button>
   </div>
+  </div><!-- /col-main -->
 
+  <div class="col-side">
   <div class="tempo">
     <h2>スピード</h2>
     <div class="pct"><span id="pct">100</span><small>%</small><span class="mult" id="mult">×1.00</span></div>
@@ -222,6 +246,7 @@
       ・うまく きおくされない ときは、ひらくたびに もういちど えらんでください。
     </p>
   </details>
+  </div><!-- /col-side -->
 </div>
 
 <input type="file" id="file" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg" style="display:none">
