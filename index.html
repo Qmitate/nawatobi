@@ -51,6 +51,15 @@
   #drop.drag{ border-color:var(--blue); background:#eaf6ff; color:var(--blue); }
   #drop b{ color:var(--ink); }
   .songname{ font-size:15px; color:var(--green2); font-weight:700; margin:6px 0 2px; min-height:20px; }
+  #drop.lost{ border-color:#ffa8a8; background:#fff5f5; color:#c92a2a; }
+  #drop.lost b{ color:#c92a2a; }
+  /* おしらせ（うまくいかなかった ことを かならず 見せる） */
+  .notice{ margin:6px auto 2px; padding:10px 14px; border-radius:14px; font-size:14px;
+           font-weight:700; line-height:1.55; max-width:640px; text-align:center; }
+  .notice.ng{   background:#fff0f0; color:#c92a2a; border:2px solid #ffc9c9; }
+  .notice.warn{ background:#fff9db; color:#e67700; border:2px solid #ffec99; }
+  .notice.ok{   background:#ebfbee; color:var(--green2); border:2px solid #b2f2bb; }
+  .notice.wait{ background:#f1f3f5; color:var(--muted); border:2px solid #dee2e6; }
 
   /* ステージ（とぶタイミングだけを 見せる。動きは JS が 曲の時刻で 駆動） */
   .stage{ position:relative; height:220px; margin:6px 0 2px; overflow:hidden; }
@@ -171,6 +180,7 @@
 
   <div id="drop">ここを タップして<br><b>きょくを えらぶ</b><br><span style="font-size:13px">（おうちのひとへ：音源ファイルを選んでください）</span></div>
   <div class="songname" id="songname"></div>
+  <div class="notice" id="notice" hidden></div>
 
   <div class="col-main">
   <div class="stage" id="stage">
@@ -240,7 +250,11 @@
     <label class="opt"><input type="checkbox" id="optPitch"> こえの たかさを そのままにする</label>
     <p class="hint">ふだんは <b>オフ（おすすめ）</b>。ゆっくりにしても 音が きれいです（そのかわり 音は すこし ひくく なります）。オンにすると 声の高さは そのままですが、ゆっくりのとき 音が にごりやすく なります。※ふつう(100%)では どちらでも 同じです。</p>
     <label class="opt"><input type="checkbox" id="optCount" checked> スタートの 5びょうまえから 「5・4・3・2・1」 の あいず</label>
-    <div style="text-align:center"><button class="linkbtn" id="changeSong">べつの きょくを えらぶ</button></div>
+    <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap">
+      <button class="linkbtn" id="soundtest">🔊 おとが でるか テスト</button>
+      <button class="linkbtn" id="changeSong">べつの きょくを えらぶ</button>
+    </div>
+    <p class="hint">ほんばんの まえに「おとが でるか テスト」を おして、スピーカーから 音が きこえるか たしかめてください。</p>
     <p class="hint">
       ・スペースキー：さいせい／とめる ・Backspace：さいしょへ<br>
       ・きょくは いちど えらぶと きおくされます（つぎからは そのまま）。<br>
@@ -262,6 +276,7 @@
   let audioReady=false, tempo=1, keepPitch=false, countIn=true, baseBpm=112, animal='🐰';
   let anchorSong=0;                 // どうぶつが とぶ拍の きじゅん（曲のなかの秒）
   let countingIn=false, actx=null, wakeLock=null, rafId=0;
+  let songBytes=null, songName='', songType='';   // いまの きょくの なかみ・なまえ・しゅるい
 
   // ---------- せってい よみこみ ----------
   try{
@@ -353,10 +368,20 @@
   }
 
   // ---------- おとの あいず（カウントイン） ----------
+  // iOS は 電話・Siri・ほかのアプリに 音を とられると AudioContext が
+  // 'suspended' ではなく 'interrupted' に なる。'closed' に なる ことも ある。
+  // 'suspended' だけ 見ていると、いちど とられた あと あいずの音が 二度と 鳴らない。
+  function wakeCtx(){
+    try{
+      if(actx && actx.state==='closed') actx=null;
+      actx=actx||new (window.AudioContext||window.webkitAudioContext)();
+      if(actx.state!=='running'){ const p=actx.resume(); if(p&&p.catch) p.catch(()=>{}); }
+      return actx;
+    }catch(e){ return null; }
+  }
   function beep(freq,dur){
     try{
-      actx=actx||new (window.AudioContext||window.webkitAudioContext)();
-      if(actx.state==='suspended') actx.resume();
+      if(!wakeCtx()) return;
       const o=actx.createOscillator(), g=actx.createGain(), t=actx.currentTime;
       o.type='sine'; o.frequency.value=freq;
       g.gain.setValueAtTime(.0001,t);
@@ -389,8 +414,7 @@
   // iOS対策：タップ（ユーザー操作）の中で 音声を「解錠」しておく
   function unlockAudioCtx(){
     try{
-      actx = actx || new (window.AudioContext||window.webkitAudioContext)();
-      if(actx.state==='suspended') actx.resume();
+      if(!wakeCtx()) return;
       const b=actx.createBuffer(1,1,22050), s=actx.createBufferSource();  // 無音を1回鳴らしてWebAudio解錠（ビープ用）
       s.buffer=b; s.connect(actx.destination); s.start(0);
     }catch(e){}
@@ -410,7 +434,11 @@
         audio.muted=false;
         try{ await runCountIn(); }catch(e){ audio.muted=false; return; }
       }
-      try{ await audio.play(); }catch(e){}
+      try{ await audio.play(); setNotice(''); }
+      catch(e){
+        if(audio.error) askAgain('再生しようとしたら曲データが読めませんでした。もう一度 選び直してください。','play');
+        else setNotice('さいせい できませんでした。がめんを 1かい タップしてから、もういちど おしてください。','ng');
+      }
     }else{
       audio.pause();
     }
@@ -428,6 +456,10 @@
   audio.addEventListener('play',()=>setPlayingUI(true));
   audio.addEventListener('pause',()=>setPlayingUI(false));
   audio.addEventListener('ended',()=>{ setPlayingUI(false); });
+  audio.addEventListener('error',()=>{
+    if(attachBusy>0 || !audioReady) return;              // よみこみ中の しっぱいは attach() が あつかう
+    askAgain('再生中に曲データが読めなくなりました。もう一度 選び直してください。','mid');
+  });
 
   // ---------- シークバー ----------
   const fmt=s=>{ s=Math.max(0,s|0); return (s/60|0)+':'+String(s%60).padStart(2,'0'); };
@@ -443,47 +475,205 @@
   // ---------- スリープ ぼうし ----------
   async function reqWake(){ try{ if('wakeLock'in navigator) wakeLock=await navigator.wakeLock.request('screen'); }catch(e){} }
   function relWake(){ try{ wakeLock&&wakeLock.release(); }catch(e){} wakeLock=null; }
-  document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible'&&!audio.paused) reqWake(); });
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState!=='visible') return;
+    if(!audio.paused) reqWake();
+    // もどってきたら 音が こわれて いる ことが ある → 手もとの なかみで つなぎ直す
+    if(audioReady && audio.error && songBytes){
+      const t=audio.currentTime||0;
+      attach(new Blob([songBytes],{type:songType})).then(ok=>{
+        if(ok){ try{ audio.currentTime=t; }catch(e){} setNotice(''); }
+        else askAgain('画面に戻ったあと、曲をつなぎ直せませんでした。もう一度 選び直してください。','reattach');
+      });
+    }
+  });
+
+  // ---------- おしらせ（うまく いかない ことを かならず 見せる） ----------
+  function setNotice(msg,kind){
+    const n=$('notice');
+    if(!msg){ n.hidden=true; n.textContent=''; n.className='notice'; return; }
+    n.className='notice '+(kind||'ok'); n.textContent=msg; n.hidden=false;
+  }
+  function askAgain(msg,code){     // きょくが つかえない → えらび直して もらう
+    songBytes=null; audioReady=false;
+    $('songname').textContent='';
+    $('seek').disabled=true; $('restart').disabled=true;
+    // また 起きた ときの 手がかり（media○ は audio の エラーばんごう）
+    const tag=(code||'?')+(audio.error?'/media'+audio.error.code:'');
+    try{ localStorage.setItem('pdn_diag',tag+' @ '+new Date().toISOString()); }catch(e){}
+    const d=$('drop');
+    d.classList.add('lost'); d.style.display='';
+    d.innerHTML='ここを タップして<br><b>もういちど きょくを えらぶ</b>'+
+                '<br><span style="font-size:13px">（おうちのひとへ：'+msg+'）</span>'+
+                '<br><span style="font-size:11px; opacity:.65">'+tag+'</span>';
+  }
 
   // ---------- きょく よみこみ ----------
-  function loadFile(file){
-    if(!file) return;
-    if(audio.src) try{ URL.revokeObjectURL(audio.src); }catch(e){}
-    audio.src=URL.createObjectURL(file);
-    audio.load();
-    audioReady=true;
-    $('songname').textContent='🎵 '+file.name;
-    $('drop').style.display='none';
-    applyTempo();
-    saveSong(file);
-    try{ localStorage.setItem('pdn_name',file.name); }catch(e){}
-  }
+  // ★だいじ★ えらんだ ファイルは その ばで「なかみ（バイト列）」を まるごと コピーして もつ。
+  //   ・File オブジェクトを そのまま しまうより たんじゅんで、こわれにくい。
+  //   ・しゅるい（MIME）を じぶんで もてる。むかしは 復元の ときに 'audio/mpeg' と
+  //     きめうち していたので、m4a などを「MP3だ」と うそを ついて 鳴らなく なっていた。
+  //   ・バイト列が 手もとに のこるので、とちゅうで こわれても すぐ つなぎ直せる。
+  //   そして いちばん だいじ なのは、ふくげん した あと「ほんとうに 鳴らせるか」を
+  //   かならず たしかめる こと（attach）。だまって 無音に なる ことを なくす。
+  let objUrl='', loadGen=0, attachBusy=0;   // attachBusy: よみこみ中の かず（かさなっても ただしく かぞえる）
 
-  // IndexedDB に きょくを ほぞん（つぎから そのまま つかえる）
-  function idb(){
+  // かくちょうしから しゅるいを すいそく。わからない ときは から（''）に して、
+  // ブラウザに なかみを 見て はんだん して もらう（きめうちで まちがえるより 安全）。
+  function guessType(name){
+    const e=String(name||'').split('.').pop().toLowerCase();
+    return { mp3:'audio/mpeg', m4a:'audio/mp4', mp4:'audio/mp4', aac:'audio/aac',
+             wav:'audio/wav', ogg:'audio/ogg', oga:'audio/ogg', flac:'audio/flac' }[e] || '';
+  }
+  function blobBytes(b){            // Blob → ArrayBuffer（ふるい Safari でも うごくように）
+    if(b.arrayBuffer) return b.arrayBuffer();
     return new Promise((res,rej)=>{
-      try{
-        const r=indexedDB.open('pdn-db',1);
-        r.onupgradeneeded=()=>r.result.createObjectStore('songs');
-        r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error);
-      }catch(e){ rej(e); }
+      const fr=new FileReader();
+      fr.onload=()=>res(fr.result); fr.onerror=()=>rej(fr.error||new Error('read'));
+      fr.readAsArrayBuffer(b);
     });
   }
-  async function saveSong(file){
-    try{ const db=await idb(); db.transaction('songs','readwrite').objectStore('songs').put(file,'song'); }catch(e){}
+
+  // audio に つないで、「ほんとうに 鳴らせる」ところまで たしかめてから true をかえす。
+  function attach(blob){
+    const gen=++loadGen, prev=objUrl, url=URL.createObjectURL(blob);
+    attachBusy++;
+    return new Promise(resolve=>{
+      let done=false;
+      const off=()=>{ audio.removeEventListener('loadedmetadata',ok); audio.removeEventListener('error',ng); clearTimeout(timer); };
+      const fin=v=>{ if(done) return; done=true; attachBusy--; off(); resolve(v); };
+      const stale=()=>{ try{ URL.revokeObjectURL(url); }catch(e){} fin(false); };  // あとから べつの よみこみが 始まっていた
+      const ok=()=>{ if(done) return; if(gen!==loadGen) return stale();
+        objUrl=url; if(prev) try{ URL.revokeObjectURL(prev); }catch(e){}
+        fin(true); };
+      const ng=()=>{ if(done) return; if(gen!==loadGen) return stale();
+        try{ URL.revokeObjectURL(url); }catch(e){}
+        if(prev){ objUrl=prev; audio.src=prev; audio.load(); } else { objUrl=''; }
+        fin(false); };
+      const timer=setTimeout(ng,20000);      // いつまでも よみこめない ときは あきらめる
+      audio.addEventListener('loadedmetadata',ok);
+      audio.addEventListener('error',ng);
+      audio.src=url; audio.load();
+    });
   }
+
+  // なかみ（ArrayBuffer）を いまの きょくに する
+  async function setSong(buf,name,type){
+    if(!buf || !buf.byteLength) return false;
+    const mime=type||guessType(name);
+    if(!await attach(new Blob([buf],{type:mime}))) return false;
+    songBytes=buf; songName=name; songType=mime;
+    audioReady=true;
+    $('songname').textContent='🎵 '+name;
+    const d=$('drop'); d.style.display='none'; d.classList.remove('lost');
+    applyTempo();
+    try{ localStorage.setItem('pdn_name',name); }catch(e){}
+    return true;
+  }
+
+  // ユーザーが ファイルを えらんだ／ドロップした とき
+  async function pickFile(file){
+    if(!file) return false;
+    setNotice('よみこみ ちゅう…','wait');
+    let buf=null;
+    try{ buf=await blobBytes(file); }catch(e){ buf=null; }   // ← ファイルの 実体が よめないと ここで こける
+    if(!buf || !buf.byteLength){
+      setNotice('この ファイルが よめませんでした。iPadの「ファイル」アプリで いちど ひらいて（ダウンロードして）から、もういちど えらんでください。','ng');
+      return false;
+    }
+    const type=file.type||guessType(file.name);
+    if(!await setSong(buf,file.name,type)){
+      setNotice('この ファイルは さいせい できませんでした。mp3 か m4a の おんがくファイルを えらんでください。','ng');
+      return false;
+    }
+    const saved=await saveSong(buf,file.name,type);
+    setNotice(saved ? '' : 'きょくを アプリに きおく できませんでした（iPadの あきようりょうが たりない かも）。つぎに ひらいた ときは もういちど えらんでください。','warn');
+    return true;
+  }
+
+  // ---------- きょくの きおく（IndexedDB） ----------
+  // File オブジェクトを そのまま しまわず、なかみ（ArrayBuffer）を しまう。
+  function idb(){
+    return new Promise((res,rej)=>{
+      let done=false;
+      const fin=(fn,v)=>{ if(done) return; done=true; clearTimeout(t); fn(v); };
+      // iOS では open() が いつまでも かえって こない ことが ある。まって しまうと
+      // アプリが 立ち上がらないので、6びょうで あきらめて さきへ すすむ。
+      const t=setTimeout(()=>fin(rej,new Error('idb timeout')),6000);
+      try{
+        const r=indexedDB.open('pdn-db',1);
+        r.onupgradeneeded=()=>{ const db=r.result; if(!db.objectStoreNames.contains('songs')) db.createObjectStore('songs'); };
+        r.onsuccess=()=>fin(res,r.result);
+        r.onerror=()=>fin(rej,r.error||new Error('idb'));
+        r.onblocked=()=>fin(rej,new Error('blocked'));
+      }catch(e){ fin(rej,e); }
+    });
+  }
+  function idbGet(key){
+    return idb().then(db=>new Promise((res,rej)=>{
+      const q=db.transaction('songs').objectStore('songs').get(key);
+      q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error||new Error('get'));
+    }));
+  }
+  function idbWrite(fn){
+    return idb().then(db=>new Promise((res,rej)=>{
+      const tx=db.transaction('songs','readwrite');
+      fn(tx.objectStore('songs'));
+      tx.oncomplete=()=>res(true);                       // ← かきこみ完了まで まつ
+      tx.onerror=()=>rej(tx.error||new Error('tx'));
+      tx.onabort=()=>rej(tx.error||new Error('abort'));
+    }));
+  }
+  async function saveSong(buf,name,type){
+    try{ await idbWrite(st=>st.put({v:2,name:name,type:type,size:buf.byteLength,buf:buf,at:Date.now()},'song')); return true; }
+    catch(e){ return false; }
+  }
+  async function dropSong(){ try{ await idbWrite(st=>st.delete('song')); }catch(e){} }
+
   async function restoreSong(){
-    try{
-      const db=await idb();
-      const blob=await new Promise((res,rej)=>{ const q=db.transaction('songs').objectStore('songs').get('song'); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error); });
-      if(blob){ const name=blob.name||localStorage.getItem('pdn_name')||'まえの きょく'; loadFile(new File([blob],name,{type:blob.type||'audio/mpeg'})); return true; }
-    }catch(e){}
-    return false;
+    let rec=null;
+    try{ rec=await idbGet('song'); }catch(e){ return false; }
+    if(!rec) return false;
+
+    let buf=null, name='', type='', legacy=false;
+    if(rec.buf && rec.buf.byteLength!==undefined){        // いまの かたち（なかみを しまってある）
+      buf=rec.buf;
+      name=rec.name||localStorage.getItem('pdn_name')||'まえの きょく';
+      type=rec.type||guessType(name);
+    }else if(typeof Blob!=='undefined' && rec instanceof Blob){   // ふるい かたち（File を そのまま しまっていた）
+      legacy=true;
+      name=rec.name||localStorage.getItem('pdn_name')||'まえの きょく';
+      type=rec.type||guessType(name);
+      try{ buf=await blobBytes(rec); }catch(e){ buf=null; }        // ← 実体が 消えていると ここで こける
+    }
+
+    if(!buf || !buf.byteLength){                          // きおくは あるのに なかみが ない
+      await dropSong();
+      askAgain('記憶していた曲データを読み出せませんでした。選び直せば直ります（今後は音声データそのものをアプリ内に保存します）。','store');
+      return false;
+    }
+    if(!await setSong(buf,name,type)){                    // なかみは あるが 鳴らせない
+      await dropSong();
+      askAgain('記憶していた曲データが再生できませんでした。もう一度 選び直してください。','decode');
+      return false;
+    }
+    if(legacy) await saveSong(buf,name,type);             // ふるい かたち → いまの かたちへ ひっこし
+    return true;
   }
+
   // 同じフォルダの poke-dance.mp3 があれば じどう よみこみ（サーバー経由のとき）
   async function tryColocated(){
     for(const n of ['poke-dance.mp3','pokedance.mp3','poke-dance.m4a','song.mp3']){
-      try{ const r=await fetch(n); if(r.ok){ loadFile(new File([await r.blob()],n,{type:'audio/mpeg'})); return true; } }catch(e){}
+      try{
+        const r=await fetch(n,{cache:'no-store'});
+        if(!r.ok) continue;
+        const ct=(r.headers.get('content-type')||'').toLowerCase();
+        if(ct.indexOf('text/')===0) continue;             // 404ページ などを つかまない
+        const buf=await r.arrayBuffer();
+        if(!buf.byteLength) continue;
+        const type=ct.indexOf('audio')===0 ? ct.split(';')[0] : guessType(n);
+        if(await setSong(buf,n,type)){ await saveSong(buf,n,type); return true; }
+      }catch(e){}
     }
     return false;
   }
@@ -493,12 +683,12 @@
   $('restart').addEventListener('click',toStart);
   $('drop').addEventListener('click',()=>$('file').click());
   $('changeSong').addEventListener('click',()=>$('file').click());
-  $('file').addEventListener('change',e=>loadFile(e.target.files[0]));
+  $('file').addEventListener('change',e=>{ pickFile(e.target.files[0]); e.target.value=''; });
 
   // ドラッグ＆ドロップ
   ['dragenter','dragover'].forEach(ev=>document.addEventListener(ev,e=>{ e.preventDefault(); $('drop').classList.add('drag'); }));
   ['dragleave','drop'].forEach(ev=>document.addEventListener(ev,e=>{ e.preventDefault(); $('drop').classList.remove('drag'); }));
-  document.addEventListener('drop',e=>{ const f=[...e.dataTransfer.files].find(f=>f.type.startsWith('audio')||/\.(mp3|m4a|aac|wav|ogg)$/i.test(f.name)); if(f) loadFile(f); });
+  document.addEventListener('drop',e=>{ const f=[...e.dataTransfer.files].find(f=>f.type.startsWith('audio')||/\.(mp3|m4a|aac|wav|ogg)$/i.test(f.name)); if(f) pickFile(f); });
 
   // テンポ そうさ
   $('tempo').addEventListener('input',e=>setTempo(+e.target.value));
@@ -510,6 +700,21 @@
   $('tap').addEventListener('click',onTap);
   $('bpmreset').addEventListener('click',()=>{ baseBpm=112; anchorSong=0; taps=[]; updateBpmOut(); save(); });
   $('animals').addEventListener('click',e=>{ const b=e.target.closest('.abtn'); if(b) setAnimal(b.dataset.a); });
+
+  // おとが でるか テスト（ほんばんの まえに つかう）
+  $('soundtest').addEventListener('click',async()=>{
+    unlockAudioCtx(); beep(880,.18);
+    if(!audioReady){ setNotice('まだ きょくが ありません。「きょくを えらぶ」を おして えらんでください。','warn'); return; }
+    const at=audio.currentTime, wasPaused=audio.paused;
+    try{
+      await audio.play();
+      setNotice('おとが きこえたら OK です 🎵（きこえない ときは iPadの おんりょうと サイレントスイッチを かくにん）','ok');
+      setTimeout(()=>{ if(wasPaused){ audio.pause(); audio.currentTime=at; updateSeek(); } },1800);
+    }catch(e){
+      if(audio.error) askAgain('テスト再生で曲データが読めませんでした。もう一度 選び直してください。','test');
+      else setNotice('きょくを ならせませんでした。がめんを 1かい タップしてから、もういちど おしてください。','ng');
+    }
+  });
 
   // せってい
   $('optPitch').addEventListener('change',e=>{ keepPitch=e.target.checked; applyTempo(); save(); });
@@ -528,7 +733,13 @@
   $('optCount').checked=countIn;
   setAnimal(animal);
   setTempo(Math.round(tempo*100));
-  (async()=>{ if(!await restoreSong()) await tryColocated(); })();
+  // ブラウザに「この データは かってに 消さないで」と おねがいする（できる ブラウザだけ）
+  try{ navigator.storage && navigator.storage.persist && navigator.storage.persist().catch(()=>{}); }catch(e){}
+
+  (async()=>{
+    if(await restoreSong()) return;
+    if(await tryColocated()) return;
+  })();
 
   // オフライン対応（https で配信したときのみ有効。file:// では何もしない）
   if('serviceWorker' in navigator && location.protocol==='https:'){
